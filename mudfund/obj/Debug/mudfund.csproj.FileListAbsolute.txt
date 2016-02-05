@@ -1,9 +1,7 @@
+C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\obj\Debug\mudfund.csproj.App.config
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\mudfund.exe.config
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\mudfund.exe
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\mudfund.pdb
-C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\obj\Debug\mudfund.csprojResolveAssemblyReference.cache
-C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\obj\Debug\mudfund.exe
-C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\obj\Debug\mudfund.pdb
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\Newtonsoft.Json.dll
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\Serilog.dll
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\Serilog.FullNetFx.dll
@@ -16,4 +14,6 @@ C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\Serilog.FullNetFx.
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\Serilog.FullNetFx.xml
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\System.Net.Http.Extensions.xml
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\System.Net.Http.Primitives.xml
-C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\obj\Debug\mudfund.csproj.App.config
+C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\obj\Debug\mudfund.exe
+C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\obj\Debug\mudfund.pdb
+C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\obj\Debug\mudfund.csprojResolveAssemblyReference.cache
