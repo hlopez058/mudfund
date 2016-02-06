@@ -9,6 +9,8 @@ using Serilog;
 using System.Net.Http;
 using System.Net;
 using System.IO;
+using Serilog.Core;
+using Serilog.Events;
 namespace mudfund
 {
     class Program
@@ -16,42 +18,137 @@ namespace mudfund
        
         static void Main(string[] args)
         {
+            var levelSwitch = new LoggingLevelSwitch();
+            levelSwitch.MinimumLevel = LogEventLevel.Verbose;
 
-            Console.WriteLine("MudFund v1.0 - Showboat");
+            var messages = new StringWriter();
+            
+            //Serilogger
+            Log.Logger = new LoggerConfiguration()
+                        .MinimumLevel.ControlledBy(levelSwitch)
+                        .Enrich.WithProperty("Name", "MudFund")
+                        .Enrich.WithProperty("Version", "1.0.0")                     
+                        .WriteTo.ColoredConsole()
+                        //.WriteTo.Logger(lc => lc
+                        //            .MinimumLevel.Is.Fatal
+                        //            .WriteTo.TextWriter(
+                        //            messages,
+                        //            outputTemplate: "{Message}{NewLine}"))
+                        .CreateLogger();
+
+            //Load a portfolio
+            var portfolio = new Portfolio();
+            portfolio.Load();
             
             //Start collecting stock info.
-            Factory.Start();
+            var stockFactory = new Factory();
+            stockFactory.Start(portfolio.StockList);
+
 
             Console.ReadLine();
 
+
+
         }
 
-        
-        class Factory
-        { 
-            public static void Start()
+        public class Portfolio
+        {
+            public List<string> StockList = new List<string>();
+
+            /// <summary>
+            /// Load stocklist from file. 
+            /// </summary>
+            /// <param name="filename">Full path and filename with extension</param>
+            public void Load(string filename)
             {
+                //read in from file
+                var lines = File.ReadAllLines(filename);
+                foreach (var line in lines) { StockList.Add(line); }
+            }
+            public void Load(List<string> stocks)
+            {
+                StockList = stocks;
+            }
+            public void Load()
+            {
+                //default list of stocks
                 //List of stocks to read
                 var stocks = new List<string>()
                 {
                     "TSLA",
                     "MSFT",
-                    "AAPL"
+                    "TSLA",
+                    "MSFT",
+                    "TSLA",
                 };
 
-                var factory = new Factory();
+                StockList = stocks;
 
-                Console.WriteLine("Reading Stocks");
+                Log.Information("Portfolio:\n{0}", string.Join("\n", stocks.ToArray()));
+            }
+
+        }
+        
+        public class Factory
+        {
+            //Finance API's
+            private IStock[] stockAPIs = 
+            { 
+                new GoogleFinance(), 
+                new YahooFinance() 
+            };
+
+            private int _stocksPerTransaction = 3; // default
+            public int stocksPerTransaction { 
+                get
+                {
+                    return _stocksPerTransaction;
+                } 
+                set
+                {
+                    _stocksPerTransaction =value;
+                }
+            }
+
+          
+
+            public void Start( List<string> stocks)
+            {
+                var listOfStockChunks = BreakIntoChunks<string>(stocks, stocksPerTransaction);
 
                 //Launch threads to retreive stock prices
-                foreach (var stock in stocks)
+                foreach (var chunk in listOfStockChunks)
                 {
-                    var t = new Thread(factory.fetchStockAsync);
-                    t.Name = string.Format("Factory thread [{0}]", stock);
-                    t.Start(stock);
+                    var t = new Thread(this.fetchStockAsync);
+                    t.Name = string.Format("Factory thread [{0}]", string.Join(",",chunk.ToArray()));
+                    t.Start(chunk);
                 }
 
+                Log.Information("Stock Factory Started");
+            }
 
+            /// <summary>
+            /// Used to break up list into smaller chunks
+            /// </summary>
+            /// <typeparam name="T"></typeparam>
+            /// <param name="list"></param>
+            /// <param name="chunkSize"></param>
+            /// <returns></returns>
+            public static List<List<T>> BreakIntoChunks<T>(List<T> list, int chunkSize)
+            {
+                if (chunkSize <= 0)
+                {
+                    throw new ArgumentException("chunkSize must be greater than 0.");
+                }
+
+                List<List<T>> retVal = new List<List<T>>();
+                while (list.Count > 0)
+                {
+                    int count = list.Count > chunkSize ? chunkSize : list.Count;
+                    retVal.Add(list.GetRange(0, count));
+                    list.RemoveRange(0, count);
+                }
+                return retVal;
             }
 
             /// <summary>
@@ -60,22 +157,34 @@ namespace mudfund
             /// <param name="symbol"></param>
             public void fetchStockAsync(object symbol)
             {
-                //Create Finance API's
-                IStock[] stockAPIs = {new GoogleFinance(), new YahooFinance()} ;
                 //Choose API to use
-                var api = stockAPIs[0]; //0=Using Google Finance 1=Yahoo Finance
+                stockAPIs.OrderBy(x => x.GetPriority());
+                var api = stockAPIs[0];
 
-                Console.WriteLine("{0} : {1} ", Thread.CurrentThread.Name, api.GetPrice((string)symbol));
+                var stocks = (List<string>)symbol;
+                var prices = api.GetPrice(stocks);
+
+                var stocksAndPrice = stocks.Zip(prices, (s, p) => new { Stock = s, Price = p });
+                Log.Debug("Ran {Name}", Thread.CurrentThread.Name);
+                foreach (var sp in stocksAndPrice)
+                {
+                    Log.Debug("{0} : {1} ", sp.Stock, sp.Price);
+                }
             }
 
-            interface IStock
+            public interface IStock
             {
                 decimal GetPrice(string stockSymbol);
-              
+                List<decimal> GetPrice(List<string> stockSymbols);
+                int GetPriority();
             }
 
             class GoogleFinance : IStock
             {
+                // priority of api usage
+                private int priority = 0;
+                public int GetPriority() { return priority; }
+
                 class Stock
                 {
                     /// <summary>
@@ -202,72 +311,22 @@ namespace mudfund
                     var avg = sum / n;
                     return avg;
               }
+
+                public List<decimal> GetPrice(List<string> stockSymbols)
+                {
+                    var stockObjs = this.Request(stockSymbols);
+
+                    var pricesString = stockObjs.Select(obj=> obj.l).ToList();
+                 
+                    return pricesString.ConvertAll(p => Convert.ToDecimal(p));
+                }
             }
 
             class YahooFinance : IStock
             {
-                /*Pricing Dividends 
-                a: Ask y: Dividend Yield 
-                b: Bid d: Dividend per Share 
-                b2: Ask (Realtime) r1: Dividend Pay Date 
-                b3: Bid (Realtime) q: Ex-Dividend Date 
-                p: Previous Close  
-                o: Open  
-                Date 
-                c1: Change d1: Last Trade Date 
-                c: Change & Percent Change d2: Trade Date 
-                c6: Change (Realtime) t1: Last Trade Time 
-                k2: Change Percent (Realtime)  
-                p2: Change in Percent  
-                Averages 
-                c8: After Hours Change (Realtime) m5: Change From 200 Day Moving Average 
-                c3: Commission m6: Percent Change From 200 Day Moving Average 
-                g: Day’s Low m7: Change From 50 Day Moving Average 
-                h: Day’s High m8: Percent Change From 50 Day Moving Average 
-                k1: Last Trade (Realtime) With Time m3: 50 Day Moving Average 
-                l: Last Trade (With Time) m4: 200 Day Moving Average 
-                l1: Last Trade (Price Only)  
-                t8: 1 yr Target Price  
-                Misc 
-                w1: Day’s Value Change g1: Holdings Gain Percent 
-                w4: Day’s Value Change (Realtime) g3: Annualized Gain 
-                p1: Price Paid g4: Holdings Gain 
-                m: Day’s Range g5: Holdings Gain Percent (Realtime) 
-                m2: Day’s Range (Realtime) g6: Holdings Gain (Realtime) 
-                52 Week Pricing Symbol Info 
-                k: 52 Week High v: More Info 
-                j: 52 week Low j1: Market Capitalization 
-                j5: Change From 52 Week Low j3: Market Cap (Realtime) 
-                k4: Change From 52 week High f6: Float Shares 
-                j6: Percent Change From 52 week Low n: Name 
-                k5: Percent Change From 52 week High n4: Notes 
-                w: 52 week Range s: Symbol 
-                s1: Shares Owned 
-                x: Stock Exchange 
-                j2: Shares Outstanding 
-                Volume 
-                v: Volume  
-                a5: Ask Size  
-                b6: Bid Size Misc 
-                k3: Last Trade Size t7: Ticker Trend 
-                a2: Average Daily Volume t6: Trade Links 
-                i5: Order Book (Realtime) 
-                Ratios l2: High Limit 
-                e: Earnings per Share l3: Low Limit 
-                e7: EPS Estimate Current Year v1: Holdings Value 
-                e8: EPS Estimate Next Year v7: Holdings Value (Realtime) 
-                e9: EPS Estimate Next Quarter s6 Revenue 
-                b4: Book Value  
-                j4: EBITDA  
-                p5: Price / Sales  
-                p6: Price / Book  
-                r: P/E Ratio  
-                r2: P/E Ratio (Realtime)  
-                r5: PEG Ratio  
-                r6: Price / EPS Estimate Current Year  
-                r7: Price / EPS Estimate Next Year  
-                s7: Short Ratio 
-                */
+                // priority of api usage
+                private int priority = 1;
+                public int GetPriority() { return priority; }
 
                 class Stock
                 {
@@ -351,7 +410,19 @@ namespace mudfund
                     return avg;
                     
                 }
+
+                public List<decimal> GetPrice(List<string> stockSymbols)
+                {
+                    var stockObjs = this.Request(stockSymbols);
+
+                    var pricesString = stockObjs.Select(obj => obj.Ask).ToList();
+
+                    return pricesString.ConvertAll(p => Convert.ToDecimal(p));
+                }
             }
+
+
+            
         }
 
         class Predictor

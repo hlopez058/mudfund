@@ -7,7 +7,6 @@ C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\Serilog.dll
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\Serilog.FullNetFx.dll
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\System.Net.Http.Extensions.dll
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\System.Net.Http.Primitives.dll
-C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\Newtonsoft.Json.xml
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\Serilog.pdb
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\Serilog.xml
 C:\Users\hlopez058\Documents\GitHub\mudfund\mudfund\bin\Debug\Serilog.FullNetFx.pdb
