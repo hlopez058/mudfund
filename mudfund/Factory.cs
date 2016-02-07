@@ -21,7 +21,7 @@ namespace mudfund
                 new YahooFinance() 
             };
 
-        private int _stocksPerTransaction = 3; // default
+        private int _stocksPerTransaction = 5; // default
         public int stocksPerTransaction
         {
             get
@@ -42,17 +42,49 @@ namespace mudfund
         { return _transactionDelay ; } 
             set { _transactionDelay = value ; } }
 
+
         private FileDB fileDB;
-        public Factory(string fileName)
+
+        private List<string> StockList { get; set; }
+
+        public Factory(string fileName,List<string> stockList)
         {
             //Create a new file database
             fileDB = new FileDB(fileName);
+            StockList = stockList;
         }
 
-        public void Start(List<string> stocks)
+        public void LoadHistorical()
+        {
+            //Choose API to use
+            stockAPIs.OrderBy(x => x.GetPriority());
+            var api = stockAPIs[0];
+
+            var fileData = new List<KeyValuePair<string, string>>();
+            foreach (var stock in StockList)
+            {
+                Log.Debug("Loading Historical data for {0} ...",stock);
+                
+                //read in historical prices
+                var hPrices = api.GetPriceHistorical(stock);
+
+                var hPricesString = string.Join (",",hPrices.ToArray());
+
+                fileData.Add(new KeyValuePair<string, string>(stock, hPricesString));
+                Log.Debug("Done.");
+            }
+
+            //clear database
+            fileDB.Clear();
+            
+            //write filedata to database
+            fileDB.Write(fileData);
+        }
+
+        public void Start()
         {
             // Break up stock list into chunks for multi-threads
-            var listOfStockChunks = BreakIntoChunks<string>(stocks, stocksPerTransaction);
+            var listOfStockChunks = BreakIntoChunks<string>(StockList, stocksPerTransaction);
 
             Log.Information("Stock Factory Started");
 
@@ -137,16 +169,15 @@ namespace mudfund
         /// Fetch stock object from an available api
         /// </summary>
         /// <param name="symbol"></param>
-        public List<KeyValuePair<string, float>> fetchStockAsync(List<string> symbol)
+        public List<KeyValuePair<string, float>> fetchStockAsync(List<string> stockList)
         {
             //Choose API to use
             stockAPIs.OrderBy(x => x.GetPriority());
             var api = stockAPIs[0];
 
-            var stocks = (List<string>)symbol;
-            var prices = api.GetPrice(stocks);
+            var prices = api.GetPrice(stockList);
 
-            var stockAndPrice = stocks.Zip(prices, (s, p) =>
+            var stockAndPrice = stockList.Zip(prices, (s, p) =>
                 new { Stock = s, Price = p });
 
             var stocksAndPrices = new List<KeyValuePair<string, float>>();
@@ -168,6 +199,8 @@ namespace mudfund
 
             private string fileName;
 
+            
+            
             /// <summary>
             /// Filename for the database file
             /// </summary>
@@ -177,7 +210,22 @@ namespace mudfund
                 this.fileName = fileName;
             }
 
-            public void Write(List<KeyValuePair<string, float>> stockPrices)
+            internal void Write(List<KeyValuePair<string, float>> stockPrices)
+            {
+                var stockPricesString = new List<KeyValuePair<string,string>>();
+                foreach(var stock in stockPrices){
+                    stockPricesString.Add(new KeyValuePair<string,string>(stock.Key,Convert.ToString(stock.Value)));
+                }
+                Write(stockPricesString);
+            }
+
+            public void Clear()
+            {
+                File.Delete(fileName);
+                
+            }
+
+            public void Write(List<KeyValuePair<string, string>> stockPrices)
             {
                 //check for file
                 if (File.Exists(fileName))
@@ -189,8 +237,6 @@ namespace mudfund
 
                     foreach (var line in File.ReadAllLines(fileName))
                     {
-
-
                         //read the symbol header on the line
                         var sym = "";
                         try { sym = line.Split(',')[0]; }
@@ -232,12 +278,15 @@ namespace mudfund
 
             }
 
+
+        
         }
 
         public interface IStock
         {
             float GetPrice(string stockSymbol);
             List<float> GetPrice(List<string> stockSymbols);
+            List<float> GetPriceHistorical(string stockSymbol);
             int GetPriority();
         }
 
@@ -383,6 +432,63 @@ namespace mudfund
 
                 return pricesString.ConvertAll(p => float.Parse(p));
             }
+
+            public List<float> GetPriceHistorical(string stockSymbol)
+            {
+                string year = Convert.ToString(DateTime.Now.Year);
+                string month = Convert.ToString(DateTime.Now.Month);
+                string day = Convert.ToString(DateTime.Now.Day);
+
+                List<string> splitted = new List<string>();
+                string fileList = GetCSV("http://ichart.finance.yahoo.com/table.csv?"+
+                                       "d=" + month + "&e="
+                                              + day + "&f="
+                                              + year + "&g=d&a="
+                                              + month + "&b="
+                                              + day + "&c="
+                                              + "1999" + "&ignore=.csv&s="
+                                              + stockSymbol);
+
+                
+
+                var lines = fileList.Split('\n').ToList();
+                lines.RemoveAt(0); //remove header
+                var hPrices = new List<float>();
+                foreach (string line in lines)
+                {
+                    try
+                    {
+                        var attr = line.Split(',');
+                        var date = attr[0];
+                        var open = attr[1];
+                        var high = attr[2];
+                        var low = attr[3];
+                        var close = attr[4];
+                        var volume = attr[5];
+                        var adjclose = attr[6];
+
+                        //take closing day value
+                        hPrices.Add(float.Parse(close));
+                    }
+                    catch { continue; }
+                }
+
+                
+                return hPrices;
+
+            }
+
+            string GetCSV(string url)
+            {
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                HttpWebResponse resp = (HttpWebResponse)req.GetResponse();
+
+                StreamReader sr = new StreamReader(resp.GetResponseStream());
+                string results = sr.ReadToEnd();
+                sr.Close();
+
+                return results;
+            }
         }
 
         class YahooFinance : IStock
@@ -483,7 +589,53 @@ namespace mudfund
 
                 return pricesString;
             }
+
+            public List<float> GetPriceHistorical(string stockSymbol)
+            {
+                string year = Convert.ToString(DateTime.Now.Year);
+                string month = Convert.ToString(DateTime.Now.Month);
+                string day = Convert.ToString(DateTime.Now.Day);
+                
+                List<string> splitted = new List<string>();
+                string fileList = GetCSV("http://ichart.finance.yahoo.com/table.csv?" +
+                                                "d=" + month + "&e="
+                                                       + day + "&f="
+                                                       + year + "&g=d&a="
+                                                       + month + "&b="
+                                                       + day + "&c="
+                                                       + year + "&ignore=.csv&s="
+                                                       + stockSymbol);
+
+                string[] tempStr;
+
+                tempStr = fileList.Split(',');
+
+                foreach (string item in tempStr)
+                {
+                    if (!string.IsNullOrWhiteSpace(item))
+                    {
+                        splitted.Add(item);
+                    }
+                }
+
+                var hPrices = new List<float>();
+                return hPrices;
+
+            }
+
+            string GetCSV(string url)
+            {
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                HttpWebResponse resp = (HttpWebResponse)req.GetResponse();
+
+                StreamReader sr = new StreamReader(resp.GetResponseStream());
+                string results = sr.ReadToEnd();
+                sr.Close();
+
+                return results;
+            }
         }
+
 
 
 

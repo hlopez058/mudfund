@@ -37,39 +37,31 @@ namespace mudfund
             portfolio.Load(@"portfolio.txt");
             
             //Start collecting stock info.
-            var stockFactory = new Factory(@"stockdb.txt");
+            var stockFactory = new Factory(@"stockdb.txt",portfolio.StockList);
             stockFactory.stocksPerTransaction = 10;
-            stockFactory.transactionDelay = 5;
-            stockFactory.Start(portfolio.StockList);
+            stockFactory.transactionDelay = 86400; //daily pullback 24hrs,86400sec
+            stockFactory.LoadHistorical(); //may take time to load
+            stockFactory.Start();
+
+
+            //-----------------------------------------------------
+            //-----------------------------------------------------
+            //-----------------------------------------------------
+            // IMPLEMENT AI ON STOCK DATA IN FILE.
+
+            //Run the prediction on stockdata
+            //Port the output of the predictor 
+            //to elasticsearch in order to view stock info
+
+            //-----------------------------------------------------
+            //-----------------------------------------------------
+            //-----------------------------------------------------
+
+
 
             Console.ReadLine();
         }
 
-        //class Predictor
-        //{
-        //    // AI, analyze and predict stock behaviour
-        //    //create interface , 
-        //}
-
-        //class Trader
-        //{
-        //    // AI, finance driven decisions to buy/sell 
-        //}
-
-        //class BankerSim
-        //{
-        //    // simulate buy/sell,fees,response time, market yield
-        //}
-
-        //class Banker
-        //{
-        //    // physical trades over api's or alert order over emails
-        //}
-
-        //class Watcher
-        //{
-        //   // create debug/finance logs that can be parsed by ELK stack
-        //}
     }
 }
 
